@@ -4,7 +4,7 @@
 - 一个简单的卡密验证系统，目前只具备基础功能
 - 项目框架：Go Frame 2.0 + Vue3 + Element Plus
 - 本项目修改自 [gfastv3](https://gitee.com/tiger1103/gfast.git), 简化了部分功能  
-
+- 前端地址 [gf-verify-ui](https://github.com/y3512537/gf-verify-ui.git)
 ## 系统功能
 
 | 功能   | 描述          | 状态  |
