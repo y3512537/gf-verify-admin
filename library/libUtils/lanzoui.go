@@ -72,5 +72,19 @@ func (s *sLanZouCloud) GetLanZouCloudRealLink(ctx context.Context, sourceLink st
 	domain := m["dom"]
 	url := m["url"]
 	g.Log().Debug(ctx, "info ", info)
+	firstReq := domain + "/file/" + url
+	firstRes, err := g.Client().SetRedirectLimit(0).Header(headerMap).Get(ctx, firstReq)
+	if err != nil {
+		g.Log().Error(ctx, "获取蓝奏云下载地址失败", err)
+		return link, fileName, err
+	}
+	if firstRes.Response.StatusCode > 400 {
+		g.Log().Error(ctx, "请求蓝奏云下载地址异常，http error", err)
+		return link, fileName, err
+	}
+	if firstRes.StatusCode == 302 {
+		return firstRes.Header.Get("Location"), info, nil
+	}
+	g.Log().Info(ctx, firstRes.Response.Body)
 	return domain + "/file/" + url, info, nil
 }

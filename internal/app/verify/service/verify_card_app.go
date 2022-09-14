@@ -243,74 +243,10 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			code := gcode.New(10, "卡密已过期", err)
 			return gerror.NewCode(code)
 		}
-		//查询是否已经绑定设备
-		deviceMap := make(map[string]entity.VerifyDevice)
-		device := entity.VerifyDevice{}
-		deviceRecord, err := dao.VerifyDevice.Ctx(ctx).All("card_id = ?", card.Id)
+		// 校验多开
+		err = checkMultiOnline(ctx, *req, software, tx)
 		if err != nil {
-			code := gcode.New(10, "登录失败，请联系管理员", err)
-			return gerror.NewCode(code)
-		}
-		// 如果没有绑定设备，则插入一条设备记录表
-		if deviceRecord.IsEmpty() {
-			g.Log().Debug(ctx, "卡号第一登录，插入登录记录")
-			device = entity.VerifyDevice{
-				CardId:        card.Id,
-				DeviceCode:    req.DeviceCode,
-				DeviceStatus:  1,
-				DeviceName:    "",
-				LastLoginTime: gtime.Now(),
-			}
-			_, err = dao.VerifyDevice.Ctx(ctx).TX(tx).Insert(device)
-			if err != nil {
-				code := gcode.New(10, "登录失败，请联系管理员", err)
-				return gerror.NewCode(code)
-			}
-			deviceMap[device.DeviceCode] = device
-		} else {
-			//否则查询卡对应的设备
-			var cardLogs []entity.VerifyDevice
-			err = deviceRecord.Structs(&cardLogs)
-			if err != nil {
-				g.Log().Error(ctx, "device 转换数组失败", err)
-				code := gcode.New(10, "登录失败，请联系管理员", err)
-				return gerror.NewCode(code)
-			}
-			//将设备列表转换为map
-			for i := range cardLogs {
-				deviceMap[cardLogs[i].DeviceCode] = cardLogs[i]
-			}
-		}
-		isReplace := card.IsReplace
-		multiOnline := card.MultiOnline
-		if card.Customize == 0 {
-			isReplace = software.IsReplace
-			multiOnline = software.MultiOnline
-		}
-		//超过多开上限时，判断是否有当前卡密
-		if len(deviceMap) > multiOnline {
-			//如果没有当前卡密，挤掉最先登录那个
-			if _, ok := deviceMap[req.DeviceCode]; !ok {
-				if isReplace == 1 {
-					cardLogList := make([]entity.VerifyDevice, len(deviceMap))
-					for s2 := range deviceMap {
-						cardLogList = append(cardLogList, deviceMap[s2])
-					}
-					firstLogin := cardLogList[0]
-					for i := range cardLogList {
-						if i > 0 && cardLogList[i].LastLoginTime.Before(firstLogin.LastLoginTime) {
-							firstLogin = cardLogList[i]
-						}
-					}
-					delete(deviceMap, firstLogin.DeviceCode)
-					deviceMap[req.DeviceCode] = device
-				} else {
-					code := gcode.New(10, "该卡密已达到多开上线", err)
-					return gerror.NewCode(code)
-				}
-			}
-		} else {
-			deviceMap[req.DeviceCode] = device
+			return err
 		}
 		claims := gconv.Map(card)
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(claims))
@@ -321,38 +257,47 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			return gerror.NewCode(code)
 		}
 		defer g.Log().Debug(ctx, "signedString", signedString)
-		// 设置token缓存
-		setKey := xid.New().String()
-		//设置token过期时间
+		// 查询设备
+		device := &entity.VerifyDevice{}
+		err = dao.VerifyDevice.Ctx(ctx).Scan(device, "card_id = ? and device_code = ?", card.Id, req.DeviceCode)
+		if err != nil {
+			return gerror.NewCode(gcode.New(11, "查询不到绑定设备", err))
+		}
+		//token过期时间
 		heartbeat := software.Heartbeat
+		// 查询是否已经存在session
+		cardSession := &entity.VerifyCardSession{}
+		sessSionRecord, _ := dao.VerifyCardSession.Ctx(ctx).One("card_id = ? and device_id = ?", card.Id, device.Id)
+		_ = sessSionRecord.Struct(cardSession)
+		var setKey = ""
+		if sessSionRecord.IsEmpty() {
+			setKey = xid.New().String()
+			// 记录设备session
+			cardSession = &entity.VerifyCardSession{
+				CardId:         card.Id,
+				SessionTimeout: gtime.Now().Add(time.Duration(heartbeat) * time.Minute),
+				// 还没做，通过nginx set header，然后在controller里获取
+				LoginIp:     "",
+				DeviceToken: setKey,
+				DeviceId:    device.Id,
+			}
+			_, err = dao.VerifyCardSession.Ctx(ctx).Insert(cardSession)
+			if err != nil {
+				g.Log().Error(ctx, "插入card session 异常", err)
+				return gerror.NewCode(gcode.New(10, "登录失败，请联系管理员", err))
+			}
+		} else {
+			setKey = cardSession.DeviceToken
+			// 设置token缓存
+			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
+			_, _ = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, "id = ?", cardSession.Id)
+		}
 		_, err = g.Redis().Do(ctx, "SETEX", setKey, heartbeat*90, signedString)
 		if err != nil {
 			g.Log().Error(ctx, "登录后设置token异常", err)
 			code := gcode.New(10, "登录失败，请联系管理员", err)
 			return gerror.NewCode(code)
 		}
-		sessSionRecord, _ := dao.VerifyCardSession.Ctx(ctx).One("card_id = ?", card.Id)
-		cardSession := &entity.VerifyCardSession{}
-		if sessSionRecord.IsEmpty() {
-			// 记录设备session
-			cardSession = &entity.VerifyCardSession{
-				CardId:         card.Id,
-				SessionTimeout: gtime.Now().Add(time.Duration(heartbeat) * time.Minute),
-				LoginIp:        "",
-				DeviceId:       req.DeviceCode,
-			}
-			_, err = dao.VerifyCardSession.Ctx(ctx).Insert(cardSession)
-			if err != nil {
-				g.Log().Error(ctx, "插入card session 异常", err)
-				code := gcode.New(10, "登录失败，请联系管理员", err)
-				return gerror.NewCode(code)
-			}
-		} else {
-			_ = sessSionRecord.Struct(cardSession)
-			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
-			_, _ = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, "id = ?", cardSession.Id)
-		}
-
 		//获取版本信息
 		versionRecord, err := dao.VerifyVersion.Ctx(ctx).Where("software_id = ? and is_publish = 1", software.Id).OrderDesc("updated_at").
 			Limit(0, 1).One()
@@ -432,7 +377,7 @@ func setExpireTime(activeTime *gtime.Time, cardType int, value int) (expireTime 
 	case 2:
 		return activeTime.Add(time.Duration(value) * time.Hour), nil
 	case 3:
-		return activeTime.Add(time.Duration(value) * time.Hour), nil
+		return activeTime.AddDate(0, 0, value), nil
 	case 4:
 		return activeTime.AddDate(0, value, 0), nil
 	case 5:
@@ -446,4 +391,74 @@ func setExpireTime(activeTime *gtime.Time, cardType int, value int) (expireTime 
 	default:
 		return nil, gerror.NewCode(gcode.New(11, "未知时间类型", nil))
 	}
+}
+
+func checkMultiOnline(ctx context.Context, req v1.CardLoginReq, software entity.VerifySoftware, tx *gdb.TX) (err error) {
+	card := &entity.VerifyCard{}
+	err = dao.VerifyCard.Ctx(ctx).Scan(card, "card_code = ?", req.CardCode)
+	if err != nil {
+		return gerror.NewCode(gcode.New(40, "卡密不存在", nil))
+	}
+	//查询是否已经绑定设备
+	var deviceList []entity.VerifyDevice
+	err = dao.VerifyDevice.Ctx(ctx).Where("card_id = ?", card.Id).
+		Where("device_code !=", req.DeviceCode).OrderAsc(dao.VerifyDevice.Columns().LastLoginTime).Scan(&deviceList)
+	if err != nil {
+		code := gcode.New(10, "登录失败，请联系管理员", err)
+		return gerror.NewCode(code)
+	}
+	isReplace := card.IsReplace
+	multiOnline := card.MultiOnline
+	if card.Customize == 0 {
+		isReplace = software.IsReplace
+		multiOnline = software.MultiOnline
+	}
+	record, err := dao.VerifyDevice.Ctx(ctx).One("card_id = ? and device_code = ?", card.Id, req.DeviceCode)
+	if err != nil {
+		return gerror.NewCode(gcode.New(41, "查询绑定设备异常", err))
+	}
+	//超过多开上限时，判断是否顶号登录
+	if len(deviceList) > (multiOnline - 1) {
+		if isReplace == 0 {
+			code := gcode.New(10, "该卡密已达到多开上线", err)
+			return gerror.NewCode(code)
+		}
+		// 顶号
+		device := &entity.VerifyDevice{}
+		_ = record.Struct(&entity.VerifyDevice{})
+		device.DeviceStatus = 0
+		// 查询session
+		cardSession := &entity.VerifyCardSession{}
+		err = dao.VerifyCardSession.Ctx(ctx).Scan(cardSession, "card_id = ? and device_id = ?", card.Id, device.Id)
+		if err != nil {
+			return gerror.NewCode(gcode.New(11, "顶号登录失败，session数据丢失", err))
+		}
+		token := cardSession.DeviceToken
+		_, err = g.Redis().Do(ctx, "DEL", token)
+		if err != nil {
+			return gerror.NewCode(gcode.New(12, "顶号登录失败", err))
+		}
+		_, err = dao.VerifyDevice.Ctx(ctx).Update(device)
+		if err != nil {
+			return gerror.NewCode(gcode.New(13, "顶号登录更新异常", err))
+		}
+	} else {
+		// 如果没有绑定设备，则插入一条设备记录表,校验结束
+		if record.IsEmpty() {
+			g.Log("checkMultiOnline").Info(ctx, "卡号", card.CardCode, "没有绑定设备，绑定到设备", req.DeviceCode, "上")
+			device := &entity.VerifyDevice{
+				CardId:        card.Id,
+				DeviceCode:    req.DeviceCode,
+				DeviceStatus:  1,
+				DeviceName:    req.DeviceName,
+				LastLoginTime: gtime.Now(),
+			}
+			_, err = dao.VerifyDevice.Ctx(ctx).TX(tx).Insert(device)
+			if err != nil {
+				code := gcode.New(10, "登录失败，请联系管理员", err)
+				return gerror.NewCode(code)
+			}
+		}
+	}
+	return nil
 }

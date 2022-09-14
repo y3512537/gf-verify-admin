@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"github.com/gogf/gf/v2/frame/g"
 	v1 "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service"
 )
@@ -18,7 +17,6 @@ func (h *hCard) AddCard(ctx context.Context, req *v1.CardAddReq) (res *v1.CardAd
 
 // ListCard 查询卡密列表
 func (h *hCard) ListCard(ctx context.Context, req *v1.CardListReq) (res *v1.CardListRes, err error) {
-	g.Log().Debug(ctx, "进来拉ListCard,参数==", req)
 	return service.Card().ListCard(ctx, req)
 }
 
