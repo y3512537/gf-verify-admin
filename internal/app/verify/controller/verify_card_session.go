@@ -12,5 +12,10 @@ type hCardSession struct{}
 
 // ListCardSession 在线设备列表
 func (h *hCardSession) ListCardSession(ctx context.Context, req *v1.CardSessionListReq) (res *v1.CardSessionListRes, err error) {
-	return service.DeviceSession().ListCardSession(ctx, req)
+	return service.CardSession().ListCardSession(ctx, req)
+}
+
+// OffLineCardSession 强制下线
+func (h *hCardSession) OffLineCardSession(ctx context.Context, req *v1.OfflineCardSessionReq) (res *v1.OfflineCardSessionRes, err error) {
+	return service.CardSession().OffLineCardSession(ctx, req)
 }

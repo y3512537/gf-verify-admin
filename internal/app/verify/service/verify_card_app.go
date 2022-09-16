@@ -112,13 +112,20 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		Nonce:           node.Generate().String(),
 		Sign:            sign,
 	}
-	record, err := dao.VerifyCardSession.Ctx(ctx).One("card_id = ?", card.Id)
+	record, err := dao.VerifyCardSession.Ctx(ctx).One("device_token = ?", req.Token)
 	if err != nil || record.IsEmpty() {
 		return nil, gerror.New("Session查询异常")
 	}
 	cardSession := entity.VerifyCardSession{}
 	_ = record.Struct(&cardSession)
-	if cardSession.SessionTimeout.Before(gtime.Now()) {
+	do, err := g.Redis().Do(ctx, "TTL", req.Token)
+	if err != nil {
+		g.Log().Error(ctx, "查询Token ttl 异常", err)
+		return nil, err
+	}
+	ttl := do.Int()
+	g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl, "暂时不续签")
+	if cardSession.SessionTimeout.Before(gtime.Now()) || ttl < heartbeat*30 {
 		g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, "续签Token")
 		err = dao.VerifyCardSession.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
@@ -137,14 +144,6 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 			g.Log().Debug(ctx, "续签后的Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl)
 			return err
 		})
-	} else {
-		do, err := g.Redis().Do(ctx, "TTL", req.Token)
-		if err != nil {
-			g.Log().Error(ctx, "查询Token ttl 异常", err)
-			return nil, err
-		}
-		ttl := do.Int64()
-		g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl, "暂时不续签")
 	}
 
 	if err != nil {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"github.com/gogf/gf/v2/net/ghttp"
 	v1 "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service"
 )
@@ -48,4 +49,11 @@ func (h *hCard) DelCard(ctx context.Context, req *v1.CardDelReq) (res *v1.CardDe
 // ImportCard 导入卡密
 func (h *hCard) ImportCard(ctx context.Context, req *v1.CardImportReq) (res *v1.CardImportRes, err error) {
 	return service.Card().ImportCard(ctx, req)
+}
+
+// DownLoadTemplate 导出卡密版本
+func (h *hCard) DownLoadTemplate(ctx context.Context, req *v1.CardDownloadTemplateReq) (res *v1.CardDownloadTemplateRes, err error) {
+	result := ghttp.RequestFromCtx(ctx)
+	result.Response.ServeFileDownload("/resource/template/Card_Import_Template.xlsx")
+	return
 }

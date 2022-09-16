@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/gogf/gf/v2/database/gdb"
+	"github.com/gogf/gf/v2/errors/gcode"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/os/gfile"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/rs/xid"
@@ -211,23 +211,19 @@ func (s *sCard) DelCard(ctx context.Context, req *v1.CardDelReq) (res *v1.CardDe
 }
 
 func (s *sCard) ImportCard(ctx context.Context, req *v1.CardImportReq) (res *v1.CardImportRes, err error) {
-	data, err := g.Config().Get(ctx, "verify")
-	configMap := data.MapStrStr()
-	tempDir := configMap["tempDir"]
 	file := req.File
 	open, err := file.FileHeader.Open()
-	_, err = file.Save(tempDir, true)
+	if file.Size < 1 {
+		return nil, gerror.NewCode(gcode.New(40, "文件不能为空", nil))
+	}
 	excel, err := excelize.OpenReader(open)
 	defer func() {
 		if err := excel.Close(); err != nil {
 			fmt.Println(err)
 		}
-		err2 := gfile.Remove(tempDir + file.Filename)
-		if err2 != nil {
-			fmt.Println(err)
-		}
 	}()
-	rows, err := excel.GetRows("Sheet1")
+	sheetName := excel.GetSheetName(0)
+	rows, err := excel.GetRows(sheetName)
 	cards := make([]*entity.VerifyCard, len(rows)-1)
 	for rowNumber, row := range rows {
 		if rowNumber == 0 {
@@ -289,6 +285,9 @@ func (s *sCard) ImportCard(ctx context.Context, req *v1.CardImportReq) (res *v1.
 			if index == 8 {
 				card.ActivateTime = gtime.ParseTimeFromContent(colCell, "Y-m-d H:i:s")
 			}
+			if index == 9 {
+				card.Comment = colCell
+			}
 			cards[rowNumber-1] = card
 		}
 	}
@@ -300,6 +299,8 @@ func getCardTypeForImport(cardTypeStr string) int {
 	res := 1
 	switch cardTypeStr {
 	case "分钟卡":
+		res = 1
+	case "小时卡":
 		res = 1
 	case "天卡":
 		res = 3

@@ -37,18 +37,8 @@ func (s *sLanZouCloud) GetLanZouCloudRealLink(ctx context.Context, sourceLink st
 	sign := signSplit[0]
 	lanZouApi := "https://www.lanzoub.com/ajaxm.php"
 	headerMap := make(map[string]string)
-	headerMap["authority"] = "www.lanzoub.com"
-	headerMap["method"] = "POST"
-	headerMap["path"] = "/ajaxm.php"
-	headerMap["scheme"] = "https"
-	headerMap["accept"] = "application/json, text/javascript, */*"
-	headerMap["accept-encoding"] = "gzip, deflate, br"
 	headerMap["accept-language"] = "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6"
-	headerMap["content-type"] = "application/x-www-form-urlencoded"
-	headerMap["origin"] = "https://www.lanzoub.com"
 	headerMap["referer"] = sourceLink
-	headerMap["x-requested-with"] = "XMLHttpRequest"
-	headerMap["Connection"] = "Keep-Alive"
 	formMap := make(map[string]string)
 	formMap["action"] = "downprocess"
 	formMap["sign"] = sign

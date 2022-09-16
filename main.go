@@ -1,6 +1,8 @@
 package main
 
 import (
+	//_ "github.com/y3512537/gf-verify-admin/packed"
+
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/gogf/gf/v2/os/glog"

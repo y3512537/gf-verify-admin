@@ -17,6 +17,37 @@
 | 云控功能 |             | 待开发 |
 | 卡密直销 |             | 待开发 |
 
+## 部署教程
+### 本地开发
+
+首先确保你本地已安装golang version >= 1.16
+- 安装gf-tools 安装教程: [gf-tools](https://goframe.org/pages/viewpage.action?pageId=1115782)
+    ```
+    gf run main.go
+    ```
+
+### 线上部署
+- 首先修改 manifest/config/config-prod.yaml，修改数据库等信息
+- 打包资源文件
+  ```
+  gf pack manifest/config,resource packed/data.go
+- 打开 `main.go` 里面的第一行注释
+- 执行打包命令(需要先安装gf tool)
+  ```
+  gf build
+  ```
+  - docker 部署(推荐)
+    - 进入dockerFile文件目录
+      ```
+      docker build -t gf-verify-admin:latest .
+      docker run --rm --name gf-verify-admin -p 8022:8022 -e GF_GCFG_FILE=config-prod.yaml gf-verify-admin:latest
+      ```
+  - 直接部署
+    复制 `./build` 目录下对应的系统执行文件服务器,然后进入所在目录
+    ```
+    $ chmod +x ./gf-verify-admin
+    $ ./gf-verify-admin --gf.gcfg.file=config-prod.yaml
+    ```
 ## 感谢(排名不分先后)
 - GFast: https://gitee.com/tiger1103/gfast.git
 

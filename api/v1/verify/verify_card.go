@@ -63,8 +63,15 @@ type CardUnbindReq struct {
 }
 
 type CardImportReq struct {
-	g.Meta `path:"/import" tags:"卡密管理" method:"post" summary:"导入卡密" mime:"multipart/form-data"`
-	File   *ghttp.UploadFile `p:"file"  v:"required#文件不能为空" type:"file"`
+	g.Meta `path:"/import" tags:"卡密管理" method:"post" summary:"导入卡密"`
+	File   *ghttp.UploadFile `p:"file" type:"file"`
+}
+type CardDownloadTemplateReq struct {
+	g.Meta `path:"/download-template" tags:"卡密管理" method:"get" summary:"下载导入模板"`
+}
+
+type CardDownloadTemplateRes struct {
+	g.Meta
 }
 
 type CardImportRes struct {

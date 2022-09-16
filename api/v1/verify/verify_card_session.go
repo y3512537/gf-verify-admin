@@ -12,6 +12,15 @@ type CardSessionListReq struct {
 	commonApi.PageReq
 }
 
+type OfflineCardSessionReq struct {
+	g.Meta `path:"/offline" tags:"在线设备" method:"post" summary:"强制设备下线"`
+	Id     int64 `p:"id"`
+}
+
+type OfflineCardSessionRes struct {
+	g.Meta `mime:"application/json"`
+}
+
 type CardSessionListRes struct {
 	g.Meta `mime:"application/json"`
 	Total  int                    `json:"total"`
@@ -20,5 +29,6 @@ type CardSessionListRes struct {
 
 type CardSessionListItem struct {
 	entity.VerifyCardSession
-	CardCode string `json:"cardCode" orm:"card_code"`
+	CardCode   string `json:"cardCode"`
+	DeviceCode string `json:"deviceCode"`
 }
