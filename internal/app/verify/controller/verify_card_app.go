@@ -19,3 +19,13 @@ func (h *hAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 func (h *hAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
 	return service.AppCard().LoginCard(ctx, req)
 }
+
+// UnbindCard 解绑当前设备
+func (h *hAppCard) UnbindCard(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
+	return service.AppCard().LoginCard(ctx, req)
+}
+
+// ServerTime 获取服务器时间
+func (h *hAppCard) ServerTime(ctx context.Context, req *v1.CardServerTimeReq) (res *v1.CardServerTimeRes, err error) {
+	return service.AppCard().ServerTime(ctx, req)
+}

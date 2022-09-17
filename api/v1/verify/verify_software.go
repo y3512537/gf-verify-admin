@@ -45,7 +45,7 @@ type SoftwareDelReq struct {
 }
 
 type SoftwareGetReq struct {
-	g.Meta `path:"/{id}" tags:"软件管理" method:"get" summary:"查询软件"`
+	g.Meta `path:"/:id/" tags:"软件管理" method:"get" summary:"查询软件"`
 	Id     string `p:"id"`
 }
 

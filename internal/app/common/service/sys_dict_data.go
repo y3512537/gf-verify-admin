@@ -28,6 +28,7 @@ type IDictData interface {
 	Get(ctx context.Context, dictCode uint) (res *system.DictDataGetRes, err error)
 	Edit(ctx context.Context, req *system.DictDataEditReq, userId uint64) (err error)
 	Delete(ctx context.Context, ids []int) (err error)
+	ListAllSimple(ctx context.Context, req *system.DictDataSimpleReq) (res *system.DictDataSimpleRes, err error)
 }
 
 type dictDataImpl struct {
@@ -112,6 +113,15 @@ func (s dictDataImpl) List(ctx context.Context, req *system.DictDataSearchReq) (
 		liberr.ErrIsNil(ctx, err, "获取字典数据失败")
 	})
 	return
+}
+
+func (s dictDataImpl) ListAllSimple(ctx context.Context, req *system.DictDataSimpleReq) (res *system.DictDataSimpleRes, err error) {
+	res = &system.DictDataSimpleRes{}
+	err = dao.SysDictData.Ctx(ctx).Scan(&res.List)
+	if err != nil {
+		liberr.ErrIsNil(ctx, err, "获取字典失败")
+	}
+	return res, err
 }
 
 func (s *dictDataImpl) Add(ctx context.Context, req *system.DictDataAddReq, userId uint64) (err error) {

@@ -15,7 +15,6 @@ import (
 	v1 "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/model/entity"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service/internal/dao"
-	"github.com/y3512537/gf-verify-admin/library/libUtils"
 	"strings"
 	"time"
 )
@@ -77,6 +76,12 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 	if err != nil {
 		g.Log().Error(ctx, "jwt token 解密失败 参数", req, err)
 		return nil, gerror.New("心跳失败，非法的Token")
+	}
+	claims := claim.Claims
+	mapStrStr := gconv.MapStrStr(claims)
+	if mapStrStr["cardCode"] != req.CardCode {
+		g.Log().Error(ctx, "jwt token 解密失败 参数", req, err)
+		return nil, gerror.New("心跳失败，非法的卡号")
 	}
 	g.Log().Debug(ctx, "token 验证返回值==", claim)
 	card := entity.VerifyCard{}
@@ -155,35 +160,13 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
 	// 根据secretId查询软件并判断软件状态
 	data, err := g.Config("config").Get(ctx, "verify")
-	software := entity.VerifySoftware{}
-	softwareRecord, err := dao.VerifySoftware.Ctx(ctx).One("secret_id = ?", req.SecretId)
-	if err != nil {
-		g.Log().Error(ctx, "卡号登录查询软件异常, cardCode", req.SecretId, err)
-		code := gcode.New(10, "登录失败，请联系管理员", err)
-		return nil, gerror.NewCode(code)
-	}
-	if softwareRecord.IsEmpty() {
-		g.Log().Error(ctx, "通过secretId 查询软件为空: secretId:", req.SecretId)
-		code := gcode.New(10, "登录失败，secretId不存在", err)
-		return nil, gerror.NewCode(code)
-	}
-	err = softwareRecord.Struct(&software)
-	if err != nil {
-		g.Log().Error(ctx, "softwareRecord.Struct(&software) error,secretId", req.SecretId)
-		code := gcode.New(10, "登录失败，请联系管理员", err)
-		return nil, gerror.NewCode(code)
-	}
-	if software.SoftwareStatus == 0 {
-		code := gcode.New(10, "登录失败，软件已禁用", err)
-		return nil, gerror.NewCode(code)
-	}
 	//校验参数签名
 	configMap := data.MapStrStr()
 	g.Log().Debug(ctx, configMap)
 	path := configMap["host"] + configMap["loginPath"]
 	url := path + "&method=POST"
 	signString := url + "&cardCode=" + req.CardCode + "&deviceCode=" + req.DeviceCode + "&nonce=" +
-		req.Nonce + "&secretId=" + req.SecretId + "&timestamp=" + req.Timestamp.TimestampStr()
+		req.Nonce + "&secretId=" + req.SecretId
 	g.Log().Debug(ctx, "sign string = >", signString)
 	sign, err := gmd5.Encrypt(signString)
 	if err != nil {
@@ -195,28 +178,13 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 		code := gcode.New(10, "登录失败，参数签名错误", err)
 		return nil, gerror.NewCode(code)
 	}
-	//查询卡密信息
-	cardCode := strings.TrimSpace(req.CardCode)
-	card := entity.VerifyCard{}
-	record, err := dao.VerifyCard.Ctx(ctx).One("card_code = ?", cardCode)
+	software, err := checkSoftware(ctx, req)
 	if err != nil {
-		g.Log().Error(ctx, "使用卡号查询卡密表异常, cardCode", cardCode, err)
-		code := gcode.New(10, "登录失败，请联系管理员", err)
-		return nil, gerror.NewCode(code)
+		return nil, err
 	}
-	if record.IsEmpty() {
-		code := gcode.New(10, "登录失败，卡密不存在", err)
-		return nil, gerror.NewCode(code)
-	}
-	err = record.Struct(&card)
+	card, err := checkCard(ctx, req)
 	if err != nil {
-		code := gcode.New(10, "登录失败，请联系管理员", err)
-		return nil, gerror.NewCode(code)
-	}
-	//卡密冻结直接返回
-	if card.CardStatus == 0 {
-		code := gcode.New(10, "该卡已被冻结", err)
-		return nil, gerror.NewCode(code)
+		return nil, err
 	}
 	err = dao.VerifyCard.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 		//如果卡密的激活时间是0，开始设置激活时间和到期时间
@@ -243,7 +211,7 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			return gerror.NewCode(code)
 		}
 		// 校验多开
-		err = checkMultiOnline(ctx, *req, software, tx)
+		err = checkMultiOnline(ctx, *req, *software, tx)
 		if err != nil {
 			return err
 		}
@@ -307,36 +275,17 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 		}
 		res = &v1.CardLoginRes{
 			CardType:  getCardType(card.CardType),
+			Heartbeat: heartbeat * 60,
 			Expires:   card.ExpireTime,
 			ExpiresTs: card.ExpireTime.Timestamp(),
 			Token:     setKey,
 		}
 		if !versionRecord.IsEmpty() {
-			version := v1.VersionRes{}
+			version := v1.VersionInfo{}
 			versionEntity := entity.VerifyVersion{}
 			_ = versionRecord.Struct(&versionEntity)
-			//查询链接
-			attachmentRecord, err := dao.VerifyAttachment.Ctx(ctx).One("id = ?", versionEntity.AttId)
-			if err != nil {
-				g.Log().Error(ctx, "查询版本附件异常", err)
-				code := gcode.New(10, "登录失败，请联系管理员", err)
-				return gerror.NewCode(code)
-			}
-			attachment := entity.VerifyAttachment{}
-			_ = attachmentRecord.Struct(&attachment)
-			if attachment.StoreType == 3 {
-				link, fileName, err := libUtils.LanZouCloud().GetLanZouCloudRealLink(ctx, attachment.FilePath, attachment.OtherParam)
-				if err != nil {
-					version.Status = 10
-				} else {
-					version.Status = 0
-					version.FileName = fileName
-				}
-				version.Link = link
-			} else {
-				version.Link = attachment.FilePath
-			}
-			version.VersionNumber = versionEntity.VersionNumber
+			version.LatestVersionId = versionEntity.Id
+			version.LatestVersionNumber = versionEntity.VersionNumber
 			version.UpdatedAt = versionEntity.UpdatedAt
 			version.Comment = versionEntity.Comment
 			res.Version = version
@@ -345,7 +294,22 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 	})
 	return res, err
 }
-
+func (s *sAppCard) ServerTime(ctx context.Context, req *v1.CardServerTimeReq) (res *v1.CardServerTimeRes, err error) {
+	tokenRecord, err := g.Redis().Do(ctx, "GET", req.Token)
+	if err != nil {
+		return nil, gerror.New("心跳失败，卡密不存在")
+	}
+	if tokenRecord.IsEmpty() {
+		code := gcode.New(100, "验证失败，Token已过期", nil)
+		return nil, gerror.NewCode(code)
+	}
+	now := gtime.Now()
+	res = &v1.CardServerTimeRes{
+		ServerTime:      now.TimestampStr(),
+		ServerTimestamp: now.Timestamp(),
+	}
+	return
+}
 func getCardType(cardType int) (typeString string) {
 	switch cardType {
 	case 1:
@@ -460,4 +424,57 @@ func checkMultiOnline(ctx context.Context, req v1.CardLoginReq, software entity.
 		}
 	}
 	return nil
+}
+
+func checkSoftware(ctx context.Context, req *v1.CardLoginReq) (software *entity.VerifySoftware, err error) {
+	software = &entity.VerifySoftware{}
+	softwareRecord, err := dao.VerifySoftware.Ctx(ctx).One("secret_id = ?", req.SecretId)
+	if err != nil {
+		g.Log().Error(ctx, "卡号登录查询软件异常, cardCode", req.SecretId, err)
+		code := gcode.New(10, "登录失败，请联系管理员", err)
+		return nil, gerror.NewCode(code)
+	}
+	if softwareRecord.IsEmpty() {
+		g.Log().Error(ctx, "通过secretId 查询软件为空: secretId:", req.SecretId)
+		code := gcode.New(10, "登录失败，secretId不存在", err)
+		return nil, gerror.NewCode(code)
+	}
+	err = softwareRecord.Struct(&software)
+	if err != nil {
+		g.Log().Error(ctx, "softwareRecord.Struct(&software) error,secretId", req.SecretId)
+		code := gcode.New(10, "登录失败，请联系管理员", err)
+		return nil, gerror.NewCode(code)
+	}
+	if software.SoftwareStatus == 0 {
+		code := gcode.New(10, "登录失败，软件已禁用", err)
+		return nil, gerror.NewCode(code)
+	}
+	return software, nil
+}
+
+func checkCard(ctx context.Context, req *v1.CardLoginReq) (card *entity.VerifyCard, err error) {
+	//查询卡密信息
+	cardCode := strings.TrimSpace(req.CardCode)
+	card = &entity.VerifyCard{}
+	record, err := dao.VerifyCard.Ctx(ctx).One("card_code = ?", cardCode)
+	if err != nil {
+		g.Log().Error(ctx, "使用卡号查询卡密表异常, cardCode", cardCode, err)
+		code := gcode.New(10, "登录失败，请联系管理员", err)
+		return nil, gerror.NewCode(code)
+	}
+	if record.IsEmpty() {
+		code := gcode.New(10, "登录失败，卡密不存在", err)
+		return nil, gerror.NewCode(code)
+	}
+	err = record.Struct(&card)
+	if err != nil {
+		code := gcode.New(10, "登录失败，请联系管理员", err)
+		return nil, gerror.NewCode(code)
+	}
+	//卡密冻结直接返回
+	if card.CardStatus == 0 {
+		code := gcode.New(10, "该卡已被冻结", err)
+		return nil, gerror.NewCode(code)
+	}
+	return card, nil
 }

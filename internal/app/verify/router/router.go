@@ -40,11 +40,20 @@ func BindController(group *ghttp.RouterGroup) {
 		_ = service.GfToken().Middleware(group)
 		group.Middleware(service.Middleware().Ctx, service.Middleware().Auth)
 	})
-	group.Group("/app-api/card", func(group *ghttp.RouterGroup) {
+	group.Group("/app-api", func(group *ghttp.RouterGroup) {
 		group.Middleware(commonService.Middleware().MiddlewareCORS)
-		group.Bind(
-			controller.AppCard,
-		)
+		group.Group("/card", func(group *ghttp.RouterGroup) {
+			group.Bind(
+				controller.AppCard,
+			)
+		})
+		group.Group("/version", func(group *ghttp.RouterGroup) {
+			group.Middleware(commonService.Middleware().MiddlewareCORS)
+			group.Bind(
+				controller.AppVersion,
+			)
+		})
 		group.Middleware(service.Middleware().Ctx, service.Middleware().Auth)
 	})
+
 }

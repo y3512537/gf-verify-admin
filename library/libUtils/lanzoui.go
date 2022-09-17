@@ -72,7 +72,7 @@ func (s *sLanZouCloud) GetLanZouCloudRealLink(ctx context.Context, sourceLink st
 		g.Log().Error(ctx, "请求蓝奏云下载地址异常，http error", err)
 		return link, fileName, err
 	}
-	if firstRes.StatusCode == 302 {
+	if firstRes.StatusCode == 302 || firstRes.StatusCode == 304 {
 		return firstRes.Header.Get("Location"), info, nil
 	}
 	g.Log().Info(ctx, firstRes.Response.Body)

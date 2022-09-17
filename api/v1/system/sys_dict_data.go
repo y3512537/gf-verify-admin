@@ -31,7 +31,7 @@ type GetDictRes struct {
 
 // DictDataSearchReq 分页请求参数
 type DictDataSearchReq struct {
-	g.Meta    `path:"/dict/data/list" tags:"字典管理" method:"get" summary:"字典数据列表"`
+	g.Meta    `path:"/dict/data/list" tags:"字典管理" method:"get" summary:"字典数据分页"`
 	DictType  string `p:"dictType"`  //字典类型
 	DictLabel string `p:"dictLabel"` //字典标签
 	Status    string `p:"status"`    //状态
@@ -43,6 +43,15 @@ type DictDataSearchRes struct {
 	g.Meta `mime:"application/json"`
 	List   []*commonEntity.SysDictData `json:"list"`
 	commonApi.ListRes
+}
+
+type DictDataSimpleReq struct {
+	g.Meta `path:"/dict/data/simple/list" tags:"字典管理" method:"get" summary:"字典数据列表"`
+}
+
+type DictDataSimpleRes struct {
+	g.Meta `mime:"application/json"`
+	List   []*commonModel.DictDataRes `json:"list"`
 }
 
 type DictDataReq struct {

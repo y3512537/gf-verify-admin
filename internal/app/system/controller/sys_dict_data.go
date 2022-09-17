@@ -31,6 +31,11 @@ func (c *dictDataController) List(ctx context.Context, req *system.DictDataSearc
 	return
 }
 
+// ListAllSimple 获取所有字典数据
+func (c *dictDataController) ListAllSimple(ctx context.Context, req *system.DictDataSimpleReq) (res *system.DictDataSimpleRes, err error) {
+	return commonService.DictData().ListAllSimple(ctx, req)
+}
+
 // Add 添加字典数据
 func (c *dictDataController) Add(ctx context.Context, req *system.DictDataAddReq) (res *system.DictDataAddRes, err error) {
 	err = commonService.DictData().Add(ctx, req, service.Context().GetUserId(ctx))

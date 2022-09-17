@@ -14,8 +14,12 @@ type DictTypeRes struct {
 
 // DictDataRes 字典数据
 type DictDataRes struct {
+	DictType  string `json:"dictType"`
+	DictSort  string `json:"dictSort"`
 	DictValue string `json:"key"`
 	DictLabel string `json:"value"`
+	CssClass  string `json:"cssClass"`
+	ListClass string `json:"listClass"`
 	IsDefault int    `json:"isDefault"`
 	Remark    string `json:"remark"`
 }
