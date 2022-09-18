@@ -16,8 +16,8 @@ type DictTypeRes struct {
 type DictDataRes struct {
 	DictType  string `json:"dictType"`
 	DictSort  string `json:"dictSort"`
-	DictValue string `json:"key"`
-	DictLabel string `json:"value"`
+	DictValue string `json:"dictValue"`
+	DictLabel string `json:"dictLabel"`
 	CssClass  string `json:"cssClass"`
 	ListClass string `json:"listClass"`
 	IsDefault int    `json:"isDefault"`
