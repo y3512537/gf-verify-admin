@@ -3,15 +3,15 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/gogf/gf/v2/crypto/gmd5"
 	"github.com/gogf/gf/v2/database/gdb"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/gogf/gf/v2/os/gtime"
+	"github.com/gogf/gf/v2/text/gstr"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/rs/xid"
+	"github.com/gogf/gf/v2/util/guid"
 	verify "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service/internal/dao"
+	"github.com/y3512537/gf-verify-admin/library/libUtils"
 )
 
 type sSoftware struct {
@@ -25,18 +25,22 @@ func Software() *sSoftware {
 
 // AddSoftware 保存软件
 func (s *sSoftware) AddSoftware(ctx context.Context, req *verify.SoftwareAddReq) (res *verify.SoftwareAddRes, err error) {
-	record, err := dao.VerifySoftware.Ctx(ctx).Where("software_name = ?", req.SoftwareName).One()
+	record, err := dao.VerifySoftware.Ctx(ctx).Where(dao.VerifySoftware.Columns().SoftwareName, req.SoftwareName).One()
 	if err != nil {
 		return nil, gerror.New("数据库链接失败")
 	}
 	if !record.IsEmpty() {
 		return nil, gerror.New("软件名称《" + req.SoftwareName + "》已存在")
 	}
+	if req.CardLength < 8 {
+		return nil, gerror.New("卡号最小长度是8位")
+	}
 	m := gconv.Map(req)
-	now := gtime.Now()
-	secretId := xid.New()
-	secretKey, _ := gmd5.EncryptString(secretId.String() + "_" + now.TimestampStr())
-	m["secret_id"] = secretId
+	// secretId 固定24位，aes加密和des加密 要求长度
+	secretId := libUtils.GenSecret(24)
+	// secretKey 固定32位
+	secretKey := guid.S()
+	m["secret_id"] = gstr.ToLower(secretId)
 	m["secret_key"] = secretKey
 	_, err = dao.VerifySoftware.Ctx(ctx).Save(m)
 	if err != nil {
@@ -71,13 +75,13 @@ func (s *sSoftware) EditSoftware(ctx context.Context, req *verify.SoftwareEditRe
 
 func (s *sSoftware) DelSoftware(ctx context.Context, req *verify.SoftwareDelReq) (res *verify.SoftwareDelRes, err error) {
 	err = dao.VerifySoftware.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
-		result, err := dao.VerifySoftware.Ctx(ctx).Where("id = ?", req.SoftwareId).Delete()
+		result, err := dao.VerifySoftware.Ctx(ctx).WherePri(req.SoftwareId).Delete()
 		if err != nil {
 			g.Log().Error(ctx, "删除失败", err)
 			return err
 		}
 		//删除卡密
-		cr, err := dao.VerifyCard.Ctx(ctx).Delete("software_id = ?", req.SoftwareId)
+		cr, err := dao.VerifyCard.Ctx(ctx).Delete(dao.VerifyCard.Columns().SoftwareId, req.SoftwareId)
 		if err != nil {
 			return err
 		}
@@ -87,7 +91,7 @@ func (s *sSoftware) DelSoftware(ctx context.Context, req *verify.SoftwareDelReq)
 		}
 		msg := fmt.Sprint("删除了 d%", rowsAffected, " 张卡密")
 		//删除版本
-		ver, err := dao.VerifyVersion.Ctx(ctx).Delete("software_id = ?", req.SoftwareId)
+		ver, err := dao.VerifyVersion.Ctx(ctx).Delete(dao.VerifyVersion.Columns().SoftwareId, req.SoftwareId)
 		if err != nil {
 			return err
 		}
@@ -106,7 +110,7 @@ func (s *sSoftware) DelSoftware(ctx context.Context, req *verify.SoftwareDelReq)
 }
 
 func (s *sSoftware) GetSoftware(ctx context.Context, req *verify.SoftwareGetReq) (res *verify.SoftwareGetRes, err error) {
-	record, err := dao.VerifySoftware.Ctx(ctx).Where("software_id", req.Id).One()
+	record, err := dao.VerifySoftware.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil {
 		g.Log().Error(ctx, "查询数据失败", err)
 		return res, gerror.New("查询失败")
@@ -119,7 +123,7 @@ func (s *sSoftware) GetSoftware(ctx context.Context, req *verify.SoftwareGetReq)
 
 }
 func (s *sSoftware) ListSoftware(ctx context.Context, req *verify.SoftwareListReq) (res *verify.SoftwareListRes, err error) {
-	desc := dao.VerifySoftware.Ctx(ctx).OrderDesc("updated_at")
+	desc := dao.VerifySoftware.Ctx(ctx).OrderDesc(dao.VerifySoftware.Columns().UpdatedAt)
 	count, err := desc.Count()
 	if err != nil {
 		g.Log().Error(ctx, "查询数据失败", err)
@@ -133,9 +137,9 @@ func (s *sSoftware) ListSoftware(ctx context.Context, req *verify.SoftwareListRe
 	}
 	softwareModel := dao.VerifySoftware.Ctx(ctx)
 	if req.SoftwareName != "" {
-		softwareModel = softwareModel.WhereLike("software_name", "%"+req.SoftwareName+"%")
+		softwareModel = softwareModel.WhereLike(dao.VerifySoftware.Columns().SoftwareName, "%"+req.SoftwareName+"%")
 	}
-	result, err := softwareModel.Page(req.PageNum, req.PageSize).OrderDesc("created_at").All()
+	result, err := softwareModel.Page(req.PageNum, req.PageSize).OrderDesc(dao.VerifySoftware.Columns().UpdatedAt).All()
 	if err != nil {
 		g.Log().Error(ctx, "查询数据失败", err)
 		return res, gerror.New("查询失败")

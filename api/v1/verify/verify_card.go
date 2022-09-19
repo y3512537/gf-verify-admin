@@ -56,9 +56,10 @@ type CardFreezeCardReq struct {
 }
 type CardFreezeCardRes struct {
 	g.Meta `mime:"application/json"`
+	Row    int `json:"row"`
 }
-type CardUnbindReq struct {
-	g.Meta `path:"/unbind" tags:"卡密管理" method:"put" summary:"卡密解绑"`
+type CardUnbindAllReq struct {
+	g.Meta `path:"/unbind-all" tags:"卡密管理" method:"put" summary:"卡密解绑"`
 	Id     int64 `p:"id"  v:"required#参数错误，卡密ID不能为空"`
 }
 
@@ -79,9 +80,9 @@ type CardImportRes struct {
 	Row    int64 `json:"row"`
 }
 
-type CardUnbindRes struct {
+type CardUnbindAllRes struct {
 	g.Meta `mime:"application/json"`
-	Row    int64 `json:"row"`
+	Row    int `json:"row"`
 }
 
 type CardDelReq struct {

@@ -36,9 +36,9 @@ func (h *hCard) FreezeCard(ctx context.Context, req *v1.CardFreezeCardReq) (res 
 	return service.Card().FreezeCard(ctx, req)
 }
 
-// UnbindCard 卡密解绑
-func (h *hCard) UnbindCard(ctx context.Context, req *v1.CardUnbindReq) (res *v1.CardUnbindRes, err error) {
-	return service.Card().UnbindCard(ctx, req)
+// UnbindAll 卡密解绑
+func (h *hCard) UnbindAll(ctx context.Context, req *v1.CardUnbindAllReq) (res *v1.CardUnbindAllRes, err error) {
+	return service.Card().UnbindAll(ctx, req)
 }
 
 // DelCard 删除卡密

@@ -23,15 +23,15 @@ func Version() *sVersion {
 func (s *sVersion) ListVersion(ctx context.Context, req *v1.VersionListReq) (res *v1.VersionListRes, err error) {
 	verModel := dao.VerifyVersion.Ctx(ctx)
 	if req.SoftwareId > 0 {
-		verModel = verModel.Where("software_id = ?", req.SoftwareId)
+		verModel = verModel.Where(dao.VerifyVersion.Columns().SoftwareId, req.SoftwareId)
 	}
 	if req.VersionNumber != "" {
-		verModel = verModel.WhereLike("version_number", "%"+req.VersionNumber+"%")
+		verModel = verModel.WhereLike(dao.VerifyVersion.Columns().VersionNumber, "%"+req.VersionNumber+"%")
 	}
 	if req.StoreType > 0 {
 		verModel = verModel.LeftJoin("verify_attachment", "verify_attachment.att_id = verify_version.att_id").Where("store_type = ?", req.StoreType)
 	}
-	count, err := verModel.CountColumn("software_id")
+	count, err := verModel.CountColumn(dao.VerifyVersion.Columns().SoftwareId)
 	if err != nil {
 		g.Log().Debug(ctx, "查询版本列表数量错误", err)
 		return nil, err
@@ -84,7 +84,8 @@ func (s *sVersion) AddVersion(ctx context.Context, req *v1.VersionAddReq) (res *
 	if req.StoreType == 1 {
 		return nil, gerror.New("数据存放还没做")
 	}
-	all, err := dao.VerifyVersion.Ctx(ctx).Where("software_id = ? and version_number = ? ", req.SoftwareId, req.VersionNumber).All()
+	all, err := dao.VerifyVersion.Ctx(ctx).Where(dao.VerifyVersion.Columns().SoftwareId, req.SoftwareId).
+		Where(dao.VerifyVersion.Columns().VersionNumber, req.VersionNumber).All()
 	if err != nil {
 		g.Log().Error(ctx, "查询版本数据错误", err)
 		return res, err
@@ -168,7 +169,7 @@ func (s *sVersion) EditVersion(ctx context.Context, req *v1.VersionEditReq) (res
 }
 
 func (s *sVersion) DelVersion(ctx context.Context, req *v1.VersionDelReq) (res *v1.VersionDelRes, err error) {
-	one, err := dao.VerifyVersion.Ctx(ctx).One("id = ?", req.Id)
+	one, err := dao.VerifyVersion.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +179,12 @@ func (s *sVersion) DelVersion(ctx context.Context, req *v1.VersionDelReq) (res *
 	}
 	var version entity.VerifyVersion
 	_ = one.Struct(&version)
-	_, err = dao.VerifyAttachment.Ctx(ctx).Delete("id = ?", version.AttId)
+	_, err = dao.VerifyAttachment.Ctx(ctx).WherePri(version.AttId).Delete()
 	if err != nil {
 		g.Log().Error(ctx, "无法删除版本，文件数据不存在", err)
 		return nil, err
 	}
-	_, err = dao.VerifyVersion.Ctx(ctx).Delete("id = ? ", req.Id)
+	_, err = dao.VerifyVersion.Ctx(ctx).Delete(dao.VerifyVersion.Columns().Id, req.Id)
 	if err != nil {
 		g.Log().Error(ctx, "无法删除版本，版本数据不存在", err)
 		return nil, err
@@ -192,7 +193,7 @@ func (s *sVersion) DelVersion(ctx context.Context, req *v1.VersionDelReq) (res *
 }
 
 func (s *sVersion) ReleaseVersion(ctx context.Context, req *v1.VersionReleaseReq) (res *v1.VersionReleaseRes, err error) {
-	one, err := dao.VerifyVersion.Ctx(ctx).One("id = ?", req.Id)
+	one, err := dao.VerifyVersion.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil || one.IsEmpty() {
 		return nil, gerror.New("软件版本不存在")
 	}
@@ -201,7 +202,7 @@ func (s *sVersion) ReleaseVersion(ctx context.Context, req *v1.VersionReleaseReq
 		return res, nil
 	}
 	verMap["is_publish"] = req.IsPublish
-	_, err = dao.VerifyVersion.Ctx(ctx).Where("ver_id = ?", req.Id).Update(verMap)
+	_, err = dao.VerifyVersion.Ctx(ctx).WherePri(req.Id).Update(verMap)
 	if err != nil {
 		return nil, gerror.NewSkip(30, "发布失败，请联系管理员")
 	}

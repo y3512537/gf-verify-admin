@@ -52,6 +52,32 @@ type CardHeartbeatRes struct {
 	Sign            string `json:"sign"`
 }
 
+type AppCardUnbindReq struct {
+	g.Meta     `path:"/unbind" tags:"卡密管理" method:"post" summary:"卡密解绑"`
+	CardCode   string `p:"cardCode"  v:"required#参数错误，卡密ID不能为空"`
+	DeviceCode string `p:"deviceCode"  v:"required#参数错误，设备编号不能为空"`
+	Timestamp  int64  `p:"timestamp" v:"required#参数错误，时间不能为空"`
+	Sign       string `p:"sign"   v:"required#参数签名错误"`
+}
+
+type AppCardUnbindRes struct {
+	g.Meta `mime:"application/json"`
+	Row    int64 `json:"row"`
+}
+type AppCardRechargeReq struct {
+	g.Meta    `path:"/recharge" tags:"卡密管理" method:"post" summary:"以卡充卡"`
+	CardCode  string `p:"cardCode"  v:"required#卡号不能为空"`
+	CardCode2 string `p:"cardCode2"  v:"required#卡号不能为空"` // card2的时间加到card1上
+	Timestamp int64  `p:"timestamp" v:"required#参数错误，时间不能为空"`
+	Sign      string `p:"sign"   v:"required#参数签名错误"`
+}
+
+type AppCardRechargeRes struct {
+	g.Meta    `mime:"application/json"`
+	Expires   *gtime.Time `json:"expires"`
+	ExpiresTs int64       `json:"expiresTs"`
+}
+
 type CardServerTimeReq struct {
 	g.Meta `path:"/server-time" tags:"卡密验证" method:"get" summary:"服务器时间"`
 	Token  string `json:"token"`

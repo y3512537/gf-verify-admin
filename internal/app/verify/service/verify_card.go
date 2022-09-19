@@ -9,13 +9,11 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/rs/xid"
 	"github.com/xuri/excelize/v2"
 	v1 "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/model/entity"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service/internal/dao"
 	"github.com/y3512537/gf-verify-admin/library/libUtils"
-	"strings"
 )
 
 type sCard struct {
@@ -62,19 +60,19 @@ func (s *sCard) ListCard(ctx context.Context, req *v1.CardListReq) (res *v1.Card
 }
 
 func (s *sCard) AddCard(ctx context.Context, req *v1.CardAddReq) (res *v1.CardAddRes, err error) {
+	softRecord, err := dao.VerifySoftware.Ctx(ctx).WherePri(req.SoftwareId).One()
+	if err != nil {
+		g.Log().Error(ctx, "查询软件信息异常 id = ", req.SoftwareId, err)
+		return nil, gerror.New("添加卡密失败，软件不存在")
+	}
+	software := &entity.VerifySoftware{}
+	err = softRecord.Struct(software)
+	if err != nil {
+		g.Log().Error(ctx, "软件转换异常", err)
+		return nil, gerror.New("系统内部错误，请联系管理员")
+	}
 	cardData := new(entity.VerifyCard)
 	if req.Customize == 0 {
-		one, err := dao.VerifySoftware.Ctx(ctx).One("id = ?", req.SoftwareId)
-		if err != nil {
-			g.Log().Error(ctx, "查询软件信息异常 id = ", req.SoftwareId, err)
-			return nil, gerror.New("添加卡密失败，软件不存在")
-		}
-		var software entity.VerifySoftware
-		err = one.Struct(&software)
-		if err != nil {
-			g.Log().Error(ctx, "软件转换异常", err)
-			return nil, gerror.New("系统内部错误，请联系管理员")
-		}
 		cardData.KeyPrefix = software.KeyPrefix
 		cardData.MultiOnline = software.MultiOnline
 		cardData.IsReplace = software.IsReplace
@@ -87,8 +85,16 @@ func (s *sCard) AddCard(ctx context.Context, req *v1.CardAddReq) (res *v1.CardAd
 	cardList := make([]string, genCount)
 	err = dao.VerifyCard.Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 		for i := 0; i < genCount; i++ {
+			var cardCode = ""
+			for {
+				cardCode = cardData.KeyPrefix + libUtils.GenCardCode(ctx, software.CardLength, software.SecretKey)
+				count, _ := dao.VerifyCard.Ctx(ctx).Where(dao.VerifyCard.Columns().CardCode, cardCode).Count()
+				if count <= 0 {
+					break
+				}
+			}
 			cardData.SoftwareId = req.SoftwareId
-			cardData.CardCode = cardData.KeyPrefix + strings.ToUpper(xid.New().String())
+			cardData.CardCode = cardCode
 			cardData.CardType = req.CardType
 			cardData.CardValue = req.CardValue
 			cardData.CardStatus = 1
@@ -115,7 +121,7 @@ func (s *sCard) AddCard(ctx context.Context, req *v1.CardAddReq) (res *v1.CardAd
 }
 
 func (s *sCard) EditCard(ctx context.Context, req *v1.CardEditReq) (res *v1.CardAddRes, err error) {
-	record, err := dao.VerifyCard.Ctx(ctx).One("id = ?", req.Id)
+	record, err := dao.VerifyCard.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil {
 		return nil, gerror.New("查询卡密出现异常")
 	}
@@ -128,7 +134,7 @@ func (s *sCard) EditCard(ctx context.Context, req *v1.CardEditReq) (res *v1.Card
 	card.MultiOnline = req.MultiOnline
 	card.Comment = req.Comment
 	card.ExpireTime = req.ExpireTime
-	_, err = dao.VerifyCard.Ctx(ctx).Update(card, "id = ?", card.Id)
+	_, err = dao.VerifyCard.Ctx(ctx).WherePri(card.Id).Update(card)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +142,7 @@ func (s *sCard) EditCard(ctx context.Context, req *v1.CardEditReq) (res *v1.Card
 }
 
 func (s *sCard) QuickRechargeCard(ctx context.Context, req *v1.CardQuickRechargeReq) (res *v1.CardQuickRechargeRes, err error) {
-	record, err := dao.VerifyCard.Ctx(ctx).One("id = ?", req.Id)
+	record, err := dao.VerifyCard.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil {
 		return nil, gerror.New("查询卡密出现异常")
 	}
@@ -154,12 +160,12 @@ func (s *sCard) QuickRechargeCard(ctx context.Context, req *v1.CardQuickRecharge
 		return nil, gerror.New("生成到期时间出现错误")
 	}
 	card.ExpireTime = expireTime
-	_, _ = dao.VerifyCard.Ctx(ctx).Update(card, "id = ?", card.Id)
+	_, _ = dao.VerifyCard.Ctx(ctx).WherePri(card.Id).Update(card)
 	return
 }
 
 func (s *sCard) FreezeCard(ctx context.Context, req *v1.CardFreezeCardReq) (res *v1.CardFreezeCardRes, err error) {
-	record, err := dao.VerifyCard.Ctx(ctx).One("id = ?", req.Id)
+	record, err := dao.VerifyCard.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil {
 		return nil, gerror.New("查询卡密出现异常")
 	}
@@ -169,37 +175,44 @@ func (s *sCard) FreezeCard(ctx context.Context, req *v1.CardFreezeCardReq) (res 
 	card := entity.VerifyCard{}
 	_ = record.Struct(&card)
 	card.CardStatus = 0
-	_, _ = dao.VerifyCard.Ctx(ctx).Update(card, "id = ?", card.Id)
+	_, _ = dao.VerifyCard.Ctx(ctx).WherePri(card.Id).Update(card)
 	//下线所有设备
-
-	return
+	row, err := offlineAllDevice(ctx, card.Id)
+	if err != nil {
+		return nil, err
+	}
+	res = &v1.CardFreezeCardRes{
+		Row: row,
+	}
+	return res, nil
 }
 
-func (s *sCard) UnbindCard(ctx context.Context, req *v1.CardUnbindReq) (res *v1.CardUnbindRes, err error) {
-	record, err := dao.VerifyCard.Ctx(ctx).One("id = ?", req.Id)
+// UnbindAll 后台解绑 不记录解绑次数
+func (s *sCard) UnbindAll(ctx context.Context, req *v1.CardUnbindAllReq) (res *v1.CardUnbindAllRes, err error) {
+	record, err := dao.VerifyCard.Ctx(ctx).WherePri(req.Id).One()
 	if err != nil {
 		return nil, gerror.New("查询卡密出现异常")
 	}
 	if record.IsEmpty() {
 		return nil, gerror.New("卡密不存在")
 	}
-	result, err := dao.VerifyDevice.Ctx(ctx).Delete("card_id = ?", req.Id)
+	_, err = dao.VerifyDevice.Ctx(ctx).Where(dao.VerifyDevice.Columns().CardId, req.Id).Delete()
 	if err != nil {
 		return nil, gerror.New("解绑出现异常")
 	}
 	card := entity.VerifyCard{}
 	_ = record.Struct(&card)
-	res = &v1.CardUnbindRes{}
+	res = &v1.CardUnbindAllRes{}
 	if card.ActivateTime.IsZero() {
 		return res, nil
 	}
-	affected, _ := result.RowsAffected()
-	res.Row = affected
+	row, _ := offlineAllDevice(ctx, card.Id)
+	res.Row = row
 	return res, nil
 }
 
 func (s *sCard) DelCard(ctx context.Context, req *v1.CardDelReq) (res *v1.CardDelRes, err error) {
-	result, err := dao.VerifyCard.Ctx(ctx).Delete("id = ?", req.Id)
+	result, err := dao.VerifyCard.Ctx(ctx).WherePri(req.Id).Delete()
 	if err != nil {
 		return nil, gerror.New("删除卡密失败")
 	}
@@ -236,7 +249,7 @@ func (s *sCard) ImportCard(ctx context.Context, req *v1.CardImportReq) (res *v1.
 				card.CardCode = colCell
 			}
 			if index == 1 {
-				record, err := dao.VerifySoftware.Ctx(ctx).WhereLike("software_name", colCell).One()
+				record, err := dao.VerifySoftware.Ctx(ctx).Where(dao.VerifySoftware.Columns().SoftwareName, colCell).One()
 				if err != nil {
 					g.Log().Error(ctx, "查询软件异常", err)
 					continue
@@ -316,4 +329,30 @@ func getCardTypeForImport(cardTypeStr string) int {
 		res = 10
 	}
 	return res
+}
+
+func offlineAllDevice(ctx context.Context, cardId int64) (row int, err error) {
+	result, err := dao.VerifyCardSession.Ctx(ctx).Where(dao.VerifyCardSession.Columns().CardId, cardId).All()
+	if err != nil {
+		g.Log().Error(ctx, err)
+		return row, gerror.New("查询在线设备出现异常")
+	}
+	if result.IsEmpty() {
+		return
+	}
+	cardSessionList := make([]*entity.VerifyCardSession, result.Len())
+	err = result.Structs(&cardSessionList)
+	if err != nil {
+		return row, gerror.New("internal error")
+	}
+	for i := range cardSessionList {
+		session := cardSessionList[i]
+		token := session.DeviceToken
+		_, _ = g.Redis().Do(ctx, "DEL", token)
+		_, err := dao.VerifyCardSession.Ctx(ctx).WherePri(session.Id).Update(session)
+		if err != nil {
+			row++
+		}
+	}
+	return row, nil
 }

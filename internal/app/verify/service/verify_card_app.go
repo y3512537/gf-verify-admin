@@ -10,8 +10,8 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/gogf/gf/v2/util/guid"
 	"github.com/golang-jwt/jwt"
-	"github.com/rs/xid"
 	v1 "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/model/entity"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service/internal/dao"
@@ -29,6 +29,9 @@ func AppCard() *sAppCard {
 }
 
 func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) (res *v1.CardHeartbeatRes, err error) {
+	if (gtime.Now().Timestamp() - req.Timestamp.Timestamp()) > 10000 {
+		return nil, gerror.NewCode(gcode.New(59, "请求已过期", nil))
+	}
 	//校验参数签名
 	data, _ := g.Config("config").Get(ctx, "verify")
 	configMap := data.MapStrStr()
@@ -54,7 +57,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		code := gcode.New(100, "验证失败，Token已过期", nil)
 		return nil, gerror.NewCode(code)
 	}
-	softwareRecord, _ := dao.VerifySoftware.Ctx(ctx).One("secret_id = ?", req.SecretId)
+	softwareRecord, _ := dao.VerifySoftware.Ctx(ctx).Where(dao.VerifySoftware.Columns().SecretId, req.SecretId).One()
 	if err != nil {
 		g.Log().Error(ctx, "查询卡密信息异常 参数", req, err)
 		return nil, gerror.New("心跳失败，软件不存在")
@@ -85,7 +88,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 	}
 	g.Log().Debug(ctx, "token 验证返回值==", claim)
 	card := entity.VerifyCard{}
-	cardRecord, err := dao.VerifyCard.Ctx(ctx).One("card_code = ?", req.CardCode)
+	cardRecord, err := dao.VerifyCard.Ctx(ctx).Where(dao.VerifyCard.Columns().CardCode, req.CardCode).One()
 	if err != nil || cardRecord.IsEmpty() {
 		g.Log().Error(ctx, "查询卡密信息异常 参数", req, err)
 		return nil, gerror.New("心跳失败，卡密不存在")
@@ -117,7 +120,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		Nonce:           node.Generate().String(),
 		Sign:            sign,
 	}
-	record, err := dao.VerifyCardSession.Ctx(ctx).One("device_token = ?", req.Token)
+	record, err := dao.VerifyCardSession.Ctx(ctx).Where(dao.VerifyCardSession.Columns().DeviceToken, req.Token).One()
 	if err != nil || record.IsEmpty() {
 		return nil, gerror.New("Session查询异常")
 	}
@@ -134,7 +137,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, "续签Token")
 		err = dao.VerifyCardSession.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
-			_, err := dao.VerifyCardSession.Ctx(ctx).Update(cardSession, "id = ?", cardSession.Id)
+			_, err = dao.VerifyCardSession.Ctx(ctx).WherePri(cardSession.Id).Update(cardSession)
 			if err != nil {
 				return err
 			}
@@ -200,7 +203,7 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			}
 			card.ExpireTime = expireTime
 			g.Log().Info(ctx, "未激活卡密开始激活，激活时间", now, "卡面值为", card.CardValue, "卡类型为", card.CardType, "激活后到期时间为", expireTime)
-			_, err = dao.VerifyCard.Ctx(ctx).TX(tx).Update(card, "id = ?", card.Id)
+			_, err = dao.VerifyCard.Ctx(ctx).TX(tx).WherePri(card.Id).Update(card)
 			if err != nil {
 				code := gcode.New(10, "登录失败，请联系管理员", err)
 				return gerror.NewCode(code)
@@ -226,7 +229,7 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 		defer g.Log().Debug(ctx, "signedString", signedString)
 		// 查询设备
 		device := &entity.VerifyDevice{}
-		err = dao.VerifyDevice.Ctx(ctx).Scan(device, "card_id = ? and device_code = ?", card.Id, req.DeviceCode)
+		err = dao.VerifyDevice.Ctx(ctx).Where(dao.VerifyDevice.Columns().CardId, card.Id).Where(dao.VerifyDevice.Columns().DeviceCode, req.DeviceCode).Scan(device)
 		if err != nil {
 			return gerror.NewCode(gcode.New(11, "查询不到绑定设备", err))
 		}
@@ -234,11 +237,11 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 		heartbeat := software.Heartbeat
 		// 查询是否已经存在session
 		cardSession := &entity.VerifyCardSession{}
-		sessSionRecord, _ := dao.VerifyCardSession.Ctx(ctx).One("card_id = ? and device_id = ?", card.Id, device.Id)
+		sessSionRecord, _ := dao.VerifyCardSession.Ctx(ctx).Where(dao.VerifyCardSession.Columns().CardId, card.Id).Where(dao.VerifyCardSession.Columns().DeviceId, device.Id).One()
 		_ = sessSionRecord.Struct(cardSession)
 		var setKey = ""
 		if sessSionRecord.IsEmpty() {
-			setKey = xid.New().String()
+			setKey = guid.S([]byte(software.SecretId), []byte(software.SecretKey))
 			// 记录设备session
 			cardSession = &entity.VerifyCardSession{
 				CardId:         card.Id,
@@ -266,8 +269,9 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			return gerror.NewCode(code)
 		}
 		//获取版本信息
-		versionRecord, err := dao.VerifyVersion.Ctx(ctx).Where("software_id = ? and is_publish = 1", software.Id).OrderDesc("updated_at").
-			Limit(0, 1).One()
+		versionRecord, err := dao.VerifyVersion.Ctx(ctx).Where(dao.VerifyVersion.Columns().SoftwareId, software.Id).
+			Where(dao.VerifyVersion.Columns().IsPublish, 1).OrderDesc(dao.VerifyVersion.Columns().UpdatedAt).
+			Limit(1).One()
 		if err != nil {
 			g.Log().Error(ctx, "查询版本异常", software.Id, err)
 			code := gcode.New(10, "登录失败，请联系管理员", err)
@@ -310,6 +314,120 @@ func (s *sAppCard) ServerTime(ctx context.Context, req *v1.CardServerTimeReq) (r
 	}
 	return
 }
+
+func (s *sAppCard) UnbindCard(ctx context.Context, req *v1.AppCardUnbindReq) (res *v1.AppCardUnbindRes, err error) {
+	if (gtime.Timestamp() - req.Timestamp) > 10000 {
+		return nil, gerror.NewCode(gcode.New(59, "请求已过期", nil))
+	}
+	card := &entity.VerifyCard{}
+	err = dao.VerifyCard.Ctx(ctx).Where(dao.VerifyCard.Columns().CardCode, req.CardCode).Scan(card)
+	if err != nil {
+		return nil, gerror.NewCode(gcode.New(60, "卡号不存在", err))
+	}
+
+	software := &entity.VerifySoftware{}
+	err = dao.VerifySoftware.Ctx(ctx).WherePri(card.SoftwareId).Scan(software)
+	if err != nil {
+		return nil, gerror.NewCode(gcode.New(61, "卡号不存在", err))
+	}
+	data, _ := g.Config("config").Get(ctx, "verify")
+	configMap := data.MapStrStr()
+	g.Log().Debug(ctx, configMap)
+	path := configMap["host"] + configMap["unbindPath"]
+	url := path + "&method=POST"
+	// 校验签名
+	unSign := url + "&cardCode=" + req.CardCode + "&deviceCode=" + req.DeviceCode + "&secretId=" + software.SecretId + "&timestamp=" + gconv.String(req.Timestamp)
+	sign, _ := gmd5.Encrypt(unSign)
+	if sign != req.Sign {
+		return nil, gerror.NewCode(gcode.New(61, "参数签名错误", err))
+	}
+	// 查询解绑次数
+	count, _ := dao.VerifyCardUnbind.Ctx(ctx).Count(dao.VerifyCardUnbind.Columns().CardId, card.Id)
+	if count >= card.UnbindCount {
+		return nil, gerror.NewCode(gcode.New(62, "解绑次数已达到上限", err))
+	}
+	// 查询绑定设备
+	err = dao.VerifyCardUnbind.Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
+		device := entity.VerifyDevice{}
+		err = dao.VerifyDevice.Ctx(ctx).Where(dao.VerifyDevice.Columns().CardId, card.Id).Where(dao.VerifyDevice.Columns().DeviceCode, req.DeviceCode).Scan(&device)
+		if err != nil {
+			return gerror.NewCode(gcode.New(63, "设备错误，请到绑定设备上解绑", err))
+		}
+		_, err := dao.VerifyDevice.Ctx(ctx).WherePri(dao.VerifyDevice.Columns().Id, device.Id).Delete()
+		if err != nil {
+			return gerror.NewCode(gcode.New(64, "解绑失败，请联系管理员", err))
+		}
+		// 添加解绑记录
+		cardUnbind := &entity.VerifyCardUnbind{}
+		cardUnbind.CardId = card.Id
+		cardUnbind.DeviceCode = device.DeviceCode
+		_, err = dao.VerifyCardUnbind.Ctx(ctx).Insert(cardUnbind)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return nil, err
+}
+
+func (s *sAppCard) CardRecharge(ctx context.Context, req *v1.AppCardRechargeReq) (res *v1.AppCardRechargeRes, err error) {
+	timestamp := req.Timestamp
+	if (gtime.Timestamp() - timestamp) > 10000 {
+		return nil, gerror.NewCode(gcode.New(72, "请求已过期", nil))
+	}
+	card := &entity.VerifyCard{}
+	err = dao.VerifyCard.Ctx(ctx).Where(dao.VerifyCard.Columns().CardCode, req.CardCode).Scan(card)
+	if err != nil {
+		return nil, gerror.NewCode(gcode.New(70, "需要加时间的卡号不存在", nil))
+	}
+	software := &entity.VerifySoftware{}
+	err = dao.VerifySoftware.Ctx(ctx).WherePri(card.SoftwareId).Scan(software)
+	if err != nil {
+		return nil, gerror.NewCode(gcode.New(71, "软件信息错误", nil))
+	}
+	data, _ := g.Config("config").Get(ctx, "verify")
+	configMap := data.MapStrStr()
+	g.Log().Debug(ctx, configMap)
+	path := configMap["host"] + configMap["cardRechargePath"]
+	url := path + "&method=POST"
+	// 校验签名
+	unSign := url + "&cardCode=" + req.CardCode + "&cardCode2=" + req.CardCode2 + "&secretId=" + software.SecretId + "&timestamp=" + gconv.String(req.Timestamp)
+	sign, _ := gmd5.Encrypt(unSign)
+	if sign != req.Sign {
+		return nil, gerror.NewCode(gcode.New(73, "参数签名错误", err))
+	}
+	card2 := &entity.VerifyCard{}
+	err = dao.VerifyCard.Ctx(ctx).Where(dao.VerifyCard.Columns().CardCode, req.CardCode2).Scan(card2)
+	if err != nil {
+		return nil, gerror.NewCode(gcode.New(74, "充值卡不存在", err))
+	}
+	if !card2.ActivateTime.IsZero() {
+		return nil, gerror.NewCode(gcode.New(75, "充值卡已被激活，无法充值", err))
+	}
+	expireTime, err := setExpireTime(card.ExpireTime, card2.CardType, card2.CardValue)
+	card.ExpireTime = expireTime
+	err = dao.VerifyCard.Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
+		_, err := dao.VerifyCard.Ctx(ctx).Update(card)
+		if err != nil {
+			return err
+		}
+		_, err = dao.VerifyCard.Ctx(ctx).WherePri(card2.Id).Delete()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		g.Log().Error(ctx, "客户端充值失败,参数", req, "错误信息", err)
+		return nil, gerror.NewCode(gcode.New(76, "充值失败，系统异常", err))
+	}
+	res = &v1.AppCardRechargeRes{
+		Expires:   expireTime,
+		ExpiresTs: expireTime.Timestamp(),
+	}
+	return res, nil
+}
+
 func getCardType(cardType int) (typeString string) {
 	switch cardType {
 	case 1:

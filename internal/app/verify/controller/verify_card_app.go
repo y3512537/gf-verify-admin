@@ -21,8 +21,13 @@ func (h *hAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 }
 
 // UnbindCard 解绑当前设备
-func (h *hAppCard) UnbindCard(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
-	return service.AppCard().LoginCard(ctx, req)
+func (h *hAppCard) UnbindCard(ctx context.Context, req *v1.AppCardUnbindReq) (res *v1.AppCardUnbindRes, err error) {
+	return service.AppCard().UnbindCard(ctx, req)
+}
+
+// CardRecharge 以卡冲卡
+func (h *hAppCard) CardRecharge(ctx context.Context, req *v1.AppCardRechargeReq) (res *v1.AppCardRechargeRes, err error) {
+	return service.AppCard().CardRecharge(ctx, req)
 }
 
 // ServerTime 获取服务器时间

@@ -1,13 +1,14 @@
 package main
 
 import (
+	"github.com/y3512537/gf-verify-admin/internal/cmd"
 	//_ "github.com/y3512537/gf-verify-admin/packed"
+	_ "github.com/y3512537/gf-verify-admin/internal/config"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/gogf/gf/v2/os/glog"
 	"github.com/y3512537/gf-verify-admin/internal/app/system/service"
-	"github.com/y3512537/gf-verify-admin/internal/cmd"
 )
 
 func init() {

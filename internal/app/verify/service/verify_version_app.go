@@ -38,7 +38,7 @@ func (s *sAppVersion) LastVersion(ctx context.Context, req *v1.LatestVersionReq)
 		versionEntity := entity.VerifyVersion{}
 		_ = versionRecord.Struct(&versionEntity)
 		//查询链接
-		attachmentRecord, err := dao.VerifyAttachment.Ctx(ctx).One("id = ?", versionEntity.AttId)
+		attachmentRecord, err := dao.VerifyAttachment.Ctx(ctx).WherePri(versionEntity.AttId).One()
 		if err != nil {
 			g.Log().Error(ctx, "查询版本附件异常", err)
 			code := gcode.New(10, "登录失败，请联系管理员", err)
