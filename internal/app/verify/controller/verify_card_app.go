@@ -15,14 +15,14 @@ func (h *hAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 	return service.AppCard().CardHeartbeat(ctx, req)
 }
 
-// LoginCard 卡密登录
-func (h *hAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
-	return service.AppCard().LoginCard(ctx, req)
+// CardLogin 卡密登录
+func (h *hAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
+	return service.AppCard().CardLogin(ctx, req)
 }
 
-// UnbindCard 解绑当前设备
-func (h *hAppCard) UnbindCard(ctx context.Context, req *v1.AppCardUnbindReq) (res *v1.AppCardUnbindRes, err error) {
-	return service.AppCard().UnbindCard(ctx, req)
+// CardUnbind 解绑当前设备
+func (h *hAppCard) CardUnbind(ctx context.Context, req *v1.AppCardUnbindReq) (res *v1.AppCardUnbindRes, err error) {
+	return service.AppCard().CardUnbind(ctx, req)
 }
 
 // CardRecharge 以卡冲卡

@@ -134,7 +134,7 @@ func (s *sCard) EditCard(ctx context.Context, req *v1.CardEditReq) (res *v1.Card
 	card.MultiOnline = req.MultiOnline
 	card.Comment = req.Comment
 	card.ExpireTime = req.ExpireTime
-	_, err = dao.VerifyCard.Ctx(ctx).WherePri(card.Id).Update(card)
+	_, err = dao.VerifyCard.Ctx(ctx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (s *sCard) QuickRechargeCard(ctx context.Context, req *v1.CardQuickRecharge
 		return nil, gerror.New("生成到期时间出现错误")
 	}
 	card.ExpireTime = expireTime
-	_, _ = dao.VerifyCard.Ctx(ctx).WherePri(card.Id).Update(card)
+	_, _ = dao.VerifyCard.Ctx(ctx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
 	return
 }
 
@@ -175,7 +175,7 @@ func (s *sCard) FreezeCard(ctx context.Context, req *v1.CardFreezeCardReq) (res 
 	card := entity.VerifyCard{}
 	_ = record.Struct(&card)
 	card.CardStatus = 0
-	_, _ = dao.VerifyCard.Ctx(ctx).WherePri(card.Id).Update(card)
+	_, _ = dao.VerifyCard.Ctx(ctx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
 	//下线所有设备
 	row, err := offlineAllDevice(ctx, card.Id)
 	if err != nil {
@@ -349,7 +349,7 @@ func offlineAllDevice(ctx context.Context, cardId int64) (row int, err error) {
 		session := cardSessionList[i]
 		token := session.DeviceToken
 		_, _ = g.Redis().Do(ctx, "DEL", token)
-		_, err := dao.VerifyCardSession.Ctx(ctx).WherePri(session.Id).Update(session)
+		_, err := dao.VerifyCardSession.Ctx(ctx).Update(session, dao.VerifyCardSession.Columns().Id, session.Id)
 		if err != nil {
 			row++
 		}

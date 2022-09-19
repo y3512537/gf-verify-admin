@@ -137,7 +137,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, "续签Token")
 		err = dao.VerifyCardSession.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
-			_, err = dao.VerifyCardSession.Ctx(ctx).WherePri(cardSession.Id).Update(cardSession)
+			_, err = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, dao.VerifyCardSession.Columns().Id, cardSession.Id)
 			if err != nil {
 				return err
 			}
@@ -160,7 +160,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 	return res, nil
 }
 
-func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
+func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1.CardLoginRes, err error) {
 	// 根据secretId查询软件并判断软件状态
 	data, err := g.Config("config").Get(ctx, "verify")
 	//校验参数签名
@@ -203,7 +203,7 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			}
 			card.ExpireTime = expireTime
 			g.Log().Info(ctx, "未激活卡密开始激活，激活时间", now, "卡面值为", card.CardValue, "卡类型为", card.CardType, "激活后到期时间为", expireTime)
-			_, err = dao.VerifyCard.Ctx(ctx).TX(tx).WherePri(card.Id).Update(card)
+			_, err = dao.VerifyCard.Ctx(ctx).TX(tx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
 			if err != nil {
 				code := gcode.New(10, "登录失败，请联系管理员", err)
 				return gerror.NewCode(code)
@@ -260,7 +260,7 @@ func (s *sAppCard) LoginCard(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			setKey = cardSession.DeviceToken
 			// 设置token缓存
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
-			_, _ = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, "id = ?", cardSession.Id)
+			_, _ = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, dao.VerifyCardSession.Columns().Id, cardSession.Id)
 		}
 		_, err = g.Redis().Do(ctx, "SETEX", setKey, heartbeat*90, signedString)
 		if err != nil {
@@ -315,7 +315,7 @@ func (s *sAppCard) ServerTime(ctx context.Context, req *v1.CardServerTimeReq) (r
 	return
 }
 
-func (s *sAppCard) UnbindCard(ctx context.Context, req *v1.AppCardUnbindReq) (res *v1.AppCardUnbindRes, err error) {
+func (s *sAppCard) CardUnbind(ctx context.Context, req *v1.AppCardUnbindReq) (res *v1.AppCardUnbindRes, err error) {
 	if (gtime.Timestamp() - req.Timestamp) > 10000 {
 		return nil, gerror.NewCode(gcode.New(59, "请求已过期", nil))
 	}
@@ -388,7 +388,7 @@ func (s *sAppCard) CardRecharge(ctx context.Context, req *v1.AppCardRechargeReq)
 	data, _ := g.Config("config").Get(ctx, "verify")
 	configMap := data.MapStrStr()
 	g.Log().Debug(ctx, configMap)
-	path := configMap["host"] + configMap["cardRechargePath"]
+	path := configMap["host"] + configMap["rechargePath"]
 	url := path + "&method=POST"
 	// 校验签名
 	unSign := url + "&cardCode=" + req.CardCode + "&cardCode2=" + req.CardCode2 + "&secretId=" + software.SecretId + "&timestamp=" + gconv.String(req.Timestamp)
@@ -407,7 +407,7 @@ func (s *sAppCard) CardRecharge(ctx context.Context, req *v1.AppCardRechargeReq)
 	expireTime, err := setExpireTime(card.ExpireTime, card2.CardType, card2.CardValue)
 	card.ExpireTime = expireTime
 	err = dao.VerifyCard.Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
-		_, err := dao.VerifyCard.Ctx(ctx).Update(card)
+		_, err := dao.VerifyCard.Ctx(ctx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
 		if err != nil {
 			return err
 		}
@@ -519,7 +519,7 @@ func checkMultiOnline(ctx context.Context, req v1.CardLoginReq, software entity.
 		if err != nil {
 			return gerror.NewCode(gcode.New(12, "顶号登录失败", err))
 		}
-		_, err = dao.VerifyDevice.Ctx(ctx).Update(device)
+		_, err = dao.VerifyDevice.Ctx(ctx).Update(device, dao.VerifyDevice.Columns().Id, device.Id)
 		if err != nil {
 			return gerror.NewCode(gcode.New(13, "顶号登录更新异常", err))
 		}
