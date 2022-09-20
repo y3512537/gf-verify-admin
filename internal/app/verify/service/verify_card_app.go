@@ -137,6 +137,7 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, "续签Token")
 		err = dao.VerifyCardSession.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
+			cardSession.Status = 1
 			_, err = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, dao.VerifyCardSession.Columns().Id, cardSession.Id)
 			if err != nil {
 				return err
@@ -250,6 +251,7 @@ func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1
 				LoginIp:     "",
 				DeviceToken: setKey,
 				DeviceId:    device.Id,
+				Status:      1,
 			}
 			_, err = dao.VerifyCardSession.Ctx(ctx).Insert(cardSession)
 			if err != nil {
@@ -260,6 +262,7 @@ func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			setKey = cardSession.DeviceToken
 			// 设置token缓存
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
+			cardSession.Status = 1
 			_, _ = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, dao.VerifyCardSession.Columns().Id, cardSession.Id)
 		}
 		_, err = g.Redis().Do(ctx, "SETEX", setKey, heartbeat*90, signedString)

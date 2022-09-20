@@ -15,6 +15,7 @@ type VerifyCardSession struct {
 	Id             interface{} // 编号
 	CardId         interface{} // 卡密Id
 	SessionTimeout *gtime.Time // 超时时间
+	Status         interface{} // 设备状态 1 在线 0 离线
 	LoginIp        interface{} // 登录IP
 	DeviceId       interface{} // 设备ID
 	DeviceToken    interface{} //

@@ -5,6 +5,7 @@ import (
 	"github.com/gogf/gf/v2/errors/gcode"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gtime"
 	v1 "github.com/y3512537/gf-verify-admin/api/v1/verify"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/model/entity"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service/internal/dao"
@@ -26,8 +27,8 @@ func (s *sCardSession) ListCardSession(ctx context.Context, req *v1.CardSessionL
 		model.WhereLike("card_code", req.CardCode+"%")
 	}
 	count, _ := model.Count()
-	result, err := model.Fields("cs.id", "cs.card_id", "session_timeout",
-		"cs.login_ip", "device_id", "cs.created_at", "cs.updated_at", "card_code as cardCode", "d.device_code as deviceCode").Page(req.PageNum, req.PageSize).All()
+	result, err := model.Fields("cs.id", "cs.card_id", "session_timeout", "status",
+		"cs.login_ip", "device_id", "cs.created_at", "cs.updated_at", "card_code as cardCode", "d.device_code as deviceCode", "d.device_name as deviceName").Page(req.PageNum, req.PageSize).All()
 	if err != nil {
 		return nil, gerror.New("查询设备Session出现异常")
 	}
@@ -57,6 +58,12 @@ func (s *sCardSession) OffLineCardSession(ctx context.Context, req *v1.OfflineCa
 	_, err = g.Redis().Do(ctx, "DEL", token)
 	if err != nil {
 		return nil, gerror.NewCode(gcode.New(51, "设备下线异常", err))
+	}
+	cardSession.Status = 0
+	cardSession.SessionTimeout = gtime.Now()
+	_, err = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, dao.VerifyCardSession.Columns().Id, cardSession.Id)
+	if err != nil {
+		return nil, gerror.NewCode(gcode.New(52, "设备下线异常", err))
 	}
 	return
 }

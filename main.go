@@ -1,9 +1,11 @@
 package main
 
 import (
-	"github.com/y3512537/gf-verify-admin/internal/cmd"
-	//_ "github.com/y3512537/gf-verify-admin/packed"
+	"github.com/gogf/gf/v2/os/gres"
 	_ "github.com/y3512537/gf-verify-admin/internal/config"
+	_ "github.com/y3512537/gf-verify-admin/packed"
+
+	"github.com/y3512537/gf-verify-admin/internal/cmd"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gctx"
@@ -12,6 +14,7 @@ import (
 )
 
 func init() {
+	gres.Dump()
 	ctx := gctx.New()
 	if service.SysInitConfig["autoInit"].Bool() && service.SysInit().IsCreateConfigFile() {
 		// 加载配置文件

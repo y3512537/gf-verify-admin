@@ -13,6 +13,7 @@ type VerifyCardSession struct {
 	Id             int64       `json:"id"             description:"编号"`
 	CardId         int64       `json:"cardId"         description:"卡密Id"`
 	SessionTimeout *gtime.Time `json:"sessionTimeout" description:"超时时间"`
+	Status         int         `json:"status"         description:"设备状态 1 在线 0 离线"`
 	LoginIp        string      `json:"loginIp"        description:"登录IP"`
 	DeviceId       int64       `json:"deviceId"       description:"设备ID"`
 	DeviceToken    string      `json:"deviceToken"    description:""`

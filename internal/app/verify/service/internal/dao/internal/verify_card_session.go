@@ -22,6 +22,7 @@ type VerifyCardSessionColumns struct {
 	Id             string // 编号
 	CardId         string // 卡密Id
 	SessionTimeout string // 超时时间
+	Status         string // 设备状态 1 在线 0 离线
 	LoginIp        string // 登录IP
 	DeviceId       string // 设备ID
 	DeviceToken    string //
@@ -35,6 +36,7 @@ var verifyCardSessionColumns = VerifyCardSessionColumns{
 	Id:             "id",
 	CardId:         "card_id",
 	SessionTimeout: "session_timeout",
+	Status:         "status",
 	LoginIp:        "login_ip",
 	DeviceId:       "device_id",
 	DeviceToken:    "device_token",

@@ -54,6 +54,6 @@ func (h *hCard) ImportCard(ctx context.Context, req *v1.CardImportReq) (res *v1.
 // DownLoadTemplate 导出卡密版本
 func (h *hCard) DownLoadTemplate(ctx context.Context, req *v1.CardDownloadTemplateReq) (res *v1.CardDownloadTemplateRes, err error) {
 	result := ghttp.RequestFromCtx(ctx)
-	result.Response.ServeFileDownload("/resource/template/Card_Import_Template.xlsx")
+	result.Response.ServeFileDownload("resource/template/Card_Import_Template.xlsx")
 	return
 }

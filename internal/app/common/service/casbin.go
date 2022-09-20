@@ -6,6 +6,8 @@ import (
 	"github.com/casbin/casbin/v2/model"
 	"github.com/casbin/casbin/v2/persist"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/os/gres"
+	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/y3512537/gf-verify-admin/internal/app/common/model/entity"
 	"github.com/y3512537/gf-verify-admin/internal/app/common/service/internal/dao"
 	"sync"
@@ -46,8 +48,14 @@ func (s *cabinImpl) newAdapter(ctx context.Context) (a *adapterCasbin) {
 func (a *adapterCasbin) initPolicy(ctx context.Context) {
 	// Because the DB is empty at first,
 	// so we need to load the policy from the file adapter (.CSV) first.
-	e, err := casbin.NewSyncedEnforcer(g.Cfg().MustGet(ctx, "casbin.modelFile").String(), a)
-
+	str := g.Cfg().MustGet(ctx, "casbin.modelFile").String()
+	content := gres.Get(str).Content()
+	newModel, err := model.NewModelFromString(gconv.String(content))
+	if err != nil {
+		a.EnforcerErr = err
+		return
+	}
+	e, err := casbin.NewSyncedEnforcer(newModel, a)
 	if err != nil {
 		a.EnforcerErr = err
 		return

@@ -31,4 +31,5 @@ type CardSessionListItem struct {
 	entity.VerifyCardSession
 	CardCode   string `json:"cardCode"`
 	DeviceCode string `json:"deviceCode"`
+	DeviceName string `json:"deviceName"`
 }
