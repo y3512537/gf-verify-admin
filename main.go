@@ -28,4 +28,5 @@ func init() {
 func main() {
 	g.Log().SetFlags(glog.F_ASYNC | glog.F_TIME_DATE | glog.F_TIME_TIME | glog.F_FILE_LONG)
 	cmd.Main.Run(gctx.New())
+
 }

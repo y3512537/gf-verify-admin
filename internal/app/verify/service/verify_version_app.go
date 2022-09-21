@@ -9,6 +9,7 @@ import (
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/model/entity"
 	"github.com/y3512537/gf-verify-admin/internal/app/verify/service/internal/dao"
 	"github.com/y3512537/gf-verify-admin/library/libUtils"
+	"strings"
 )
 
 type sAppVersion struct {
@@ -57,6 +58,8 @@ func (s *sAppVersion) LastVersion(ctx context.Context, req *v1.LatestVersionReq)
 			res.Link = link
 		} else {
 			res.Link = attachment.FilePath
+			split := strings.Split(res.Link, "/")
+			res.FileName = split[len(split)-1]
 		}
 		res.VersionNumber = versionEntity.VersionNumber
 		res.UpdatedAt = versionEntity.UpdatedAt

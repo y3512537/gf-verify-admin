@@ -30,6 +30,7 @@ func AppCard() *sAppCard {
 
 func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) (res *v1.CardHeartbeatRes, err error) {
 	if (gtime.Now().Timestamp() - req.Timestamp.Timestamp()) > 10000 {
+		g.Log("CardHeartbeat").Info(ctx, "CardHeartbeat 请求过期，参数", req)
 		return nil, gerror.NewCode(gcode.New(59, "请求已过期", nil))
 	}
 	//校验参数签名
@@ -80,13 +81,6 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		g.Log().Error(ctx, "jwt token 解密失败 参数", req, err)
 		return nil, gerror.New("心跳失败，非法的Token")
 	}
-	claims := claim.Claims
-	mapStrStr := gconv.MapStrStr(claims)
-	if mapStrStr["cardCode"] != req.CardCode {
-		g.Log().Error(ctx, "jwt token 解密失败 参数", req, err)
-		return nil, gerror.New("心跳失败，非法的卡号")
-	}
-	g.Log().Debug(ctx, "token 验证返回值==", claim)
 	card := entity.VerifyCard{}
 	cardRecord, err := dao.VerifyCard.Ctx(ctx).Where(dao.VerifyCard.Columns().CardCode, req.CardCode).One()
 	if err != nil || cardRecord.IsEmpty() {
@@ -97,6 +91,12 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 	if err != nil {
 		g.Log().Error(ctx, "查询卡密信息异常 参数", req, err)
 		return nil, gerror.New("心跳失败，请联系管理员")
+	}
+	claims := claim.Claims
+	mapStrStr := gconv.MapStrStr(claims)
+	if mapStrStr["cardId"] != gconv.String(card.Id) {
+		g.Log().Error(ctx, "jwt token 解密失败 参数", req, err)
+		return nil, gerror.New("心跳失败，非法的卡号")
 	}
 	if card.CardStatus == 0 {
 		return nil, gerror.New("验证失败，该卡已被冻结")
@@ -132,9 +132,8 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 		return nil, err
 	}
 	ttl := do.Int()
-	g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl, "暂时不续签")
 	if cardSession.SessionTimeout.Before(gtime.Now()) || ttl < heartbeat*30 {
-		g.Log().Debug(ctx, "当前Session Time：{}", cardSession.SessionTimeout, "续签Token")
+		g.Log().Info(ctx, "当前Session Time：{}", cardSession.SessionTimeout, "续签Token")
 		err = dao.VerifyCardSession.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 			cardSession.SessionTimeout = gtime.Now().Add(time.Duration(heartbeat) * time.Minute)
 			cardSession.Status = 1
@@ -150,9 +149,11 @@ func (s *sAppCard) CardHeartbeat(ctx context.Context, req *v1.CardHeartbeatReq) 
 				return err
 			}
 			ttl := do.Int64()
-			g.Log().Debug(ctx, "续签后的Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl)
+			g.Log().Info(ctx, "续签后的Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl)
 			return err
 		})
+	} else {
+		g.Log().Info(ctx, "当前Session Time：{}", cardSession.SessionTimeout, ",剩余时间TTl = ", ttl, "暂时不续签")
 	}
 
 	if err != nil {
@@ -219,15 +220,6 @@ func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1
 		if err != nil {
 			return err
 		}
-		claims := gconv.Map(card)
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(claims))
-		signedString, err := token.SignedString([]byte(software.SecretKey))
-		if err != nil {
-			g.Log().Error(ctx, "使用 secretKye: ", software.SecretKey, "进行签名异常", err)
-			code := gcode.New(10, "登录失败，请联系管理员", err)
-			return gerror.NewCode(code)
-		}
-		defer g.Log().Debug(ctx, "signedString", signedString)
 		// 查询设备
 		device := &entity.VerifyDevice{}
 		err = dao.VerifyDevice.Ctx(ctx).Where(dao.VerifyDevice.Columns().CardId, card.Id).Where(dao.VerifyDevice.Columns().DeviceCode, req.DeviceCode).Scan(device)
@@ -265,7 +257,19 @@ func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1
 			cardSession.Status = 1
 			_, _ = dao.VerifyCardSession.Ctx(ctx).Update(cardSession, dao.VerifyCardSession.Columns().Id, cardSession.Id)
 		}
-		_, err = g.Redis().Do(ctx, "SETEX", setKey, heartbeat*90, signedString)
+		expires := heartbeat * 90
+		// 签名token
+		tokenUnSign := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(gconv.Map(cardSession)))
+		g.Log("CardLogin").Info(ctx, "tokenUnSign", tokenUnSign)
+		tokenSign, err := tokenUnSign.SignedString([]byte(software.SecretKey))
+		if err != nil {
+			g.Log("CardLogin").Error(ctx, "使用 secretKye: ", software.SecretKey, "进行签名异常", err)
+			code := gcode.New(10, "登录失败，请联系管理员", err)
+			return gerror.NewCode(code)
+		}
+		g.Log("CardLogin").Info(ctx, "signedString", tokenSign)
+		g.Log("CardLogin").Info(ctx, "CardLogin 设置token 过期时间", setKey, expires, tokenSign)
+		_, err = g.Redis().Do(ctx, "SETEX", setKey, expires, tokenSign)
 		if err != nil {
 			g.Log().Error(ctx, "登录后设置token异常", err)
 			code := gcode.New(10, "登录失败，请联系管理员", err)
@@ -302,6 +306,8 @@ func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1
 	return res, err
 }
 func (s *sAppCard) ServerTime(ctx context.Context, req *v1.CardServerTimeReq) (res *v1.CardServerTimeRes, err error) {
+	do, err := g.Redis().Do(ctx, "TTL", req.Token)
+	g.Log("ServerTime").Info(ctx, "获取服务器过期时间，TTL", do.Int())
 	tokenRecord, err := g.Redis().Do(ctx, "GET", req.Token)
 	if err != nil {
 		return nil, gerror.New("心跳失败，卡密不存在")
