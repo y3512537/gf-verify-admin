@@ -73,7 +73,9 @@ func (s *sLanZouCloud) GetLanZouCloudRealLink(ctx context.Context, sourceLink st
 		return link, fileName, err
 	}
 	if firstRes.StatusCode == 302 || firstRes.StatusCode == 304 {
-		return firstRes.Header.Get("Location"), info, nil
+		link := firstRes.Header.Get("Location")
+		g.Log().Debug(ctx, "获取到蓝奏云重定向地址：", link)
+		return link, info, nil
 	}
 	g.Log().Info(ctx, firstRes.Response.Body)
 	return domain + "/file/" + url, info, nil
