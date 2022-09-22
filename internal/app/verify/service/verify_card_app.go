@@ -193,23 +193,9 @@ func (s *sAppCard) CardLogin(ctx context.Context, req *v1.CardLoginReq) (res *v1
 	}
 	err = dao.VerifyCard.Ctx(ctx).Transaction(ctx, func(ctx context.Context, tx *gdb.TX) error {
 		//如果卡密的激活时间是0，开始设置激活时间和到期时间
-		if card.ActivateTime.IsZero() {
-			g.Log().Info(ctx, "卡未激活，更新激活时间", card)
-			now := gtime.Now()
-			card.ActivateTime = now
-			expireTime, err := setExpireTime(card.ActivateTime, card.CardType, card.CardValue)
-			if err != nil {
-				g.Log().Error(ctx, "卡号登录设置超时时间异常, cardCode", card, err)
-				code := gcode.New(10, "登录失败，请联系管理员", err)
-				return gerror.NewCode(code)
-			}
-			card.ExpireTime = expireTime
-			g.Log().Info(ctx, "未激活卡密开始激活，激活时间", now, "卡面值为", card.CardValue, "卡类型为", card.CardType, "激活后到期时间为", expireTime)
-			_, err = dao.VerifyCard.Ctx(ctx).TX(tx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
-			if err != nil {
-				code := gcode.New(10, "登录失败，请联系管理员", err)
-				return gerror.NewCode(code)
-			}
+		err = activeCard(ctx, card)
+		if err != nil {
+			return err
 		}
 		if card.ExpireTime.Before(gtime.Now()) {
 			code := gcode.New(10, "卡密已过期", err)
@@ -604,4 +590,26 @@ func checkCard(ctx context.Context, req *v1.CardLoginReq) (card *entity.VerifyCa
 		return nil, gerror.NewCode(code)
 	}
 	return card, nil
+}
+
+func activeCard(ctx context.Context, card *entity.VerifyCard) (err error) {
+	if card.ActivateTime.IsZero() {
+		g.Log().Info(ctx, "卡未激活，更新激活时间", card)
+		now := gtime.Now()
+		card.ActivateTime = now
+		expireTime, err := setExpireTime(card.ActivateTime, card.CardType, card.CardValue)
+		if err != nil {
+			g.Log().Error(ctx, "卡号登录设置超时时间异常, cardCode", card, err)
+			code := gcode.New(10, "登录失败，请联系管理员", err)
+			return gerror.NewCode(code)
+		}
+		card.ExpireTime = expireTime
+		g.Log().Info(ctx, "未激活卡密开始激活，激活时间", now, "卡面值为", card.CardValue, "卡类型为", card.CardType, "激活后到期时间为", expireTime)
+		_, err = dao.VerifyCard.Ctx(ctx).Update(card, dao.VerifyCard.Columns().Id, card.Id)
+		if err != nil {
+			code := gcode.New(10, "登录失败，请联系管理员", err)
+			return gerror.NewCode(code)
+		}
+	}
+	return nil
 }

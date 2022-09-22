@@ -1,15 +1,15 @@
 package main
 
 import (
-	"github.com/gogf/gf/v2/os/gres"
 	_ "github.com/y3512537/gf-verify-admin/internal/config"
-	_ "github.com/y3512537/gf-verify-admin/packed"
+	//_ "github.com/y3512537/gf-verify-admin/packed"
 
 	"github.com/y3512537/gf-verify-admin/internal/cmd"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gctx"
 	"github.com/gogf/gf/v2/os/glog"
+	"github.com/gogf/gf/v2/os/gres"
 	"github.com/y3512537/gf-verify-admin/internal/app/system/service"
 )
 
